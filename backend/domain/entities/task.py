@@ -45,6 +45,13 @@ class Task:
         self.status = TaskStatus.IN_REVIEW
         self.updated_at = datetime.utcnow()
 
+    def back_to_progress(self) -> None:
+        """Regresa la tarea a en progreso. Solo desde IN_REVIEW."""
+        if self.status != TaskStatus.IN_REVIEW:
+            raise InvalidTaskOperationError("Only IN_REVIEW tasks can be moved back to in progress")
+        self.status = TaskStatus.IN_PROGRESS
+        self.updated_at = datetime.utcnow()
+
     def complete(self) -> None:
         """Completa la tarea. Desde IN_PROGRESS o IN_REVIEW."""
         if self.status not in (TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW):

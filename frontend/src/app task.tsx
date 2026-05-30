@@ -123,7 +123,7 @@ export default function App() {
 
 // ── Board ─────────────────────────────────────────────────────────────────────
 function Board({ onLogout }: { onLogout: () => void }) {
-  const { tasks, loading, error, fetchTasks, createTask, updateTask, moveTask, deleteTask } = useTasks(PROJECT_ID);
+  const { tasks, loading, error, setError, fetchTasks, createTask, updateTask, moveTask, deleteTask } = useTasks(PROJECT_ID);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -160,12 +160,29 @@ function Board({ onLogout }: { onLogout: () => void }) {
     setEditTask(null);
   };
 
+  // Transiciones válidas según las reglas del dominio backend
+  const VALID_TRANSITIONS: Record<string, string[]> = {
+    todo:        ["in_progress"],
+    in_progress: ["in_review", "done"],
+    in_review:   ["in_progress", "done"],
+    done:        [],
+  };
+
   const handleDrop = (targetStatus: string) => {
     if (!dragging) return;
     const task = tasks.find(t => t.id === dragging);
-    if (!task || task.status === targetStatus) return;
+    if (!task || task.status === targetStatus) { setDragging(null); return; }
+
+    const allowed = VALID_TRANSITIONS[task.status] ?? [];
+    if (!allowed.includes(targetStatus)) {
+      setError(`No se puede mover de "${task.status}" a "${targetStatus}" directamente`);
+      setDragging(null);
+      return;
+    }
+
     if (targetStatus === "in_review") moveTask(dragging, "review");
     else if (targetStatus === "done") moveTask(dragging, "complete");
+    else if (targetStatus === "in_progress") moveTask(dragging, "back");
     setDragging(null);
   };
 
@@ -237,7 +254,7 @@ function Board({ onLogout }: { onLogout: () => void }) {
 }
 
 // ── TaskCard ──────────────────────────────────────────────────────────────────
-interface TaskCardProps { task: Task; currentCol: string; onEdit: () => void; onDelete: () => void; onMove: (id: string, action: "review" | "complete") => void; onDragStart: () => void; onDragEnd: () => void; }
+interface TaskCardProps { task: Task; currentCol: string; onEdit: () => void; onDelete: () => void; onMove: (id: string, action: "review" | "complete" | "back") => void; onDragStart: () => void; onDragEnd: () => void; }
 
 function TaskCard({ task, currentCol, onEdit, onDelete, onMove, onDragStart, onDragEnd }: TaskCardProps) {
   const p = PRIORITY_META[task.priority];
@@ -257,6 +274,7 @@ function TaskCard({ task, currentCol, onEdit, onDelete, onMove, onDragStart, onD
       </div>
       <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" as const }}>
         {currentCol === "in_progress" && <button onClick={() => onMove(task.id, "review")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #8b5cf6", color: "#8b5cf6", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>→ Revisión</button>}
+        {currentCol === "in_review" && <button onClick={() => onMove(task.id, "back")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #f59e0b", color: "#f59e0b", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>← En progreso</button>}
         {(currentCol === "in_progress" || currentCol === "in_review") && <button onClick={() => onMove(task.id, "complete")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #10b981", color: "#10b981", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>✓ Completar</button>}
       </div>
     </div>
@@ -292,4 +310,3 @@ function TaskFormModal({ title, form, onChange, onConfirm, onCancel, confirmLabe
     </div>
   );
 }
-

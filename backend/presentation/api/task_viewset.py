@@ -7,16 +7,20 @@ from rest_framework.response import Response
 
 from application.container import (
     get_assign_task_use_case,
+    get_back_to_progress_use_case,
     get_complete_task_use_case,
     get_create_task_use_case,
     get_send_to_review_use_case,
-    get_update_task_use_case,
+    get_start_task_use_case,
     get_task_repo,
+    get_update_task_use_case,
 )
 from application.use_cases.assign_task import AssignTaskCommand
+from application.use_cases.back_to_progress import BackToProgressCommand
 from application.use_cases.complete_task import CompleteTaskCommand
 from application.use_cases.create_task import CreateTaskCommand
 from application.use_cases.send_to_review import SendToReviewCommand
+from application.use_cases.start_task import StartTaskCommand
 from application.use_cases.update_task import UpdateTaskCommand
 from domain.exceptions import DomainException, TaskNotFoundError
 from domain.value_objects.priority import Priority
@@ -68,7 +72,6 @@ class TaskViewSet(viewsets.ViewSet):
                 {"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Filtros opcionales
         raw_status = request.query_params.get("status")
         raw_priority = request.query_params.get("priority")
         assignee_id = request.query_params.get("assignee_id")
@@ -97,11 +100,17 @@ class TaskViewSet(viewsets.ViewSet):
                 command = AssignTaskCommand(task_id=pk, assignee_id=assignee_id)
                 task = get_assign_task_use_case().execute(command)
 
-            elif action == "complete":
-                task = get_complete_task_use_case().execute(CompleteTaskCommand(task_id=pk))
+            elif action == "start":
+                task = get_start_task_use_case().execute(StartTaskCommand(task_id=pk))
+
+            elif action == "back":
+                task = get_back_to_progress_use_case().execute(BackToProgressCommand(task_id=pk))
 
             elif action == "review":
                 task = get_send_to_review_use_case().execute(SendToReviewCommand(task_id=pk))
+
+            elif action == "complete":
+                task = get_complete_task_use_case().execute(CompleteTaskCommand(task_id=pk))
 
             elif action == "update":
                 serializer = UpdateTaskSerializer(data=request.data)
@@ -118,7 +127,7 @@ class TaskViewSet(viewsets.ViewSet):
 
             else:
                 return Response(
-                    {"error": f"Invalid action: {action!r}. Valid: assign, complete, review, update"},
+                    {"error": f"Invalid action: {action!r}. Valid: assign, back, complete, review, start, update"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -144,3 +153,4 @@ class TaskViewSet(viewsets.ViewSet):
 
         logger.info("Task deleted: id=%s", pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+    

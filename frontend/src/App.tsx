@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Task, COLUMNS, PRIORITY_META, Priority } from "./domain/types";
 import { useTasks } from "./application/hooks/useTasks";
+import Chatbot from "./chatbot";
 
 const PROJECT_ID = "c0bf6187-bb07-4e74-b5e3-b5b87d2ed4e5";
 const API_URL = process.env.REACT_APP_API_URL ?? "http://localhost:8000/api";
@@ -121,9 +122,17 @@ export default function App() {
   return <Board onLogout={handleLogout} />;
 }
 
+// ── Transiciones válidas según reglas del dominio ─────────────────────────────
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  todo:        ["in_progress"],
+  in_progress: ["in_review", "done"],
+  in_review:   ["in_progress", "done"],
+  done:        [],
+};
+
 // ── Board ─────────────────────────────────────────────────────────────────────
 function Board({ onLogout }: { onLogout: () => void }) {
-  const { tasks, loading, error, fetchTasks, createTask, updateTask, moveTask, deleteTask } = useTasks(PROJECT_ID);
+  const { tasks, loading, error, setError, fetchTasks, createTask, updateTask, moveTask, deleteTask } = useTasks(PROJECT_ID);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -135,7 +144,6 @@ function Board({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
-  // Si hay error 401, forzar logout
   useEffect(() => {
     if (error && error.includes("401")) onLogout();
   }, [error, onLogout]);
@@ -192,8 +200,18 @@ function Board({ onLogout }: { onLogout: () => void }) {
   const handleDrop = (targetStatus: string) => {
     if (!dragging) return;
     const task = tasks.find(t => t.id === dragging);
-    if (!task || task.status === targetStatus) return;
-    if (targetStatus === "in_review") moveTask(dragging, "review");
+    if (!task || task.status === targetStatus) { setDragging(null); return; }
+
+    const allowed = VALID_TRANSITIONS[task.status] ?? [];
+    if (!allowed.includes(targetStatus)) {
+      setError(`Transición no permitida: "${task.status}" → "${targetStatus}"`);
+      setDragging(null);
+      return;
+    }
+
+    if (targetStatus === "in_progress" && task.status === "todo") moveTask(dragging, "start");
+    else if (targetStatus === "in_progress") moveTask(dragging, "back");
+    else if (targetStatus === "in_review") moveTask(dragging, "review");
     else if (targetStatus === "done") moveTask(dragging, "complete");
     setDragging(null);
   };
@@ -239,7 +257,7 @@ function Board({ onLogout }: { onLogout: () => void }) {
         <button style={s.btn("#334155")} onClick={applyFilters}>Aplicar</button>
         <button style={{ ...s.btn("#1e293b"), border: "1px solid #334155" }} onClick={resetFilters}>Limpiar</button>
         {loading && <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>Cargando…</span>}
-        {error && <span style={{ color: "#ef4444", fontSize: "0.8rem" }}>{error}</span>}
+        {error && <span style={{ color: "#ef4444", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => setError(null)}>{error} ✕</span>}
       </div>
 
       <div style={s.board}>
@@ -261,12 +279,15 @@ function Board({ onLogout }: { onLogout: () => void }) {
 
       {showCreate && <TaskFormModal title="Nueva tarea" form={form} onChange={setForm} onConfirm={handleCreate} onCancel={() => { setShowCreate(false); setForm(EMPTY_FORM); setFormError(null); }} confirmLabel="Crear tarea" error={formError} />}
       {editTask && <TaskFormModal title={`Editar: ${editTask.title}`} form={editForm} onChange={setEditForm} onConfirm={handleUpdate} onCancel={() => { setEditTask(null); setFormError(null); }} confirmLabel="Guardar cambios" error={formError} />}
+
+      {/* Chatbot flotante */}
+      <Chatbot />
     </div>
   );
 }
 
 // ── TaskCard ──────────────────────────────────────────────────────────────────
-interface TaskCardProps { task: Task; currentCol: string; onEdit: () => void; onDelete: () => void; onMove: (id: string, action: "review" | "complete") => void; onDragStart: () => void; onDragEnd: () => void; }
+interface TaskCardProps { task: Task; currentCol: string; onEdit: () => void; onDelete: () => void; onMove: (id: string, action: "review" | "complete" | "back" | "start") => void; onDragStart: () => void; onDragEnd: () => void; }
 
 function TaskCard({ task, currentCol, onEdit, onDelete, onMove, onDragStart, onDragEnd }: TaskCardProps) {
   const p = PRIORITY_META[task.priority];
@@ -285,7 +306,9 @@ function TaskCard({ task, currentCol, onEdit, onDelete, onMove, onDragStart, onD
         {dueDateStr && <span style={{ fontSize: "0.7rem", color: task.is_overdue ? "#ef4444" : "#94a3b8" }}>{task.is_overdue ? "⚠️" : "📅"} {dueDateStr}</span>}
       </div>
       <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" as const }}>
+        {currentCol === "todo" && <button onClick={() => onMove(task.id, "start")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #6366f1", color: "#6366f1", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>▶ Iniciar</button>}
         {currentCol === "in_progress" && <button onClick={() => onMove(task.id, "review")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #8b5cf6", color: "#8b5cf6", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>→ Revisión</button>}
+        {currentCol === "in_review" && <button onClick={() => onMove(task.id, "back")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #f59e0b", color: "#f59e0b", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>← En progreso</button>}
         {(currentCol === "in_progress" || currentCol === "in_review") && <button onClick={() => onMove(task.id, "complete")} style={{ fontSize: "0.68rem", background: "#1e293b", border: "1px solid #10b981", color: "#10b981", borderRadius: 4, padding: "0.15rem 0.45rem", cursor: "pointer" }}>✓ Completar</button>}
       </div>
     </div>
@@ -316,7 +339,7 @@ function TaskFormModal({ title, form, onChange, onConfirm, onCancel, confirmLabe
           <input type="datetime-local" style={s.input} value={form.due_date} onChange={e => set("due_date", e.target.value)} />
         </div>
         {error && <p style={{ margin: 0, color: "#f87171", fontSize: "0.82rem" }}>{error}</p>}
-      <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
           <button style={s.btn("#334155")} onClick={onCancel}>Cancelar</button>
           <button style={s.btn("linear-gradient(135deg,#6366f1,#8b5cf6)")} onClick={onConfirm}>{confirmLabel}</button>
         </div>
@@ -324,4 +347,3 @@ function TaskFormModal({ title, form, onChange, onConfirm, onCancel, confirmLabe
     </div>
   );
 }
-

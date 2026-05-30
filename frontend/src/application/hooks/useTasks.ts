@@ -41,12 +41,24 @@ export const useTasks = (projectId: string) => {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
   };
 
-  const moveTask = async (taskId: string, action: "review" | "complete"): Promise<void> => {
-    const updated =
-      action === "review"
-        ? await taskService.sendToReview(taskId)
-        : await taskService.complete(taskId);
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+  const moveTask = async (taskId: string, action: "review" | "complete" | "back" | "start"): Promise<void> => {
+    try {
+      const updated =
+        action === "start"
+          ? await taskService.startTask(taskId)
+          : action === "review"
+          ? await taskService.sendToReview(taskId)
+          : action === "back"
+          ? await taskService.backToProgress(taskId)
+          : await taskService.complete(taskId);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+    } catch (e: any) {
+      // Extraer mensaje del backend (ej: "Task must be in progress to send to review")
+      const msg: string = e.message ?? "Error al mover la tarea";
+      // Quitar prefijo "HTTP 422 - " para mostrar solo el mensaje del dominio
+      const clean = msg.replace(/^HTTP \d+ - /, "");
+      setError(clean);
+    }
   };
 
   const assignTask = async (taskId: string, assigneeId: string): Promise<void> => {
@@ -65,6 +77,7 @@ export const useTasks = (projectId: string) => {
     tasks,
     loading,
     error,
+    setError,
     fetchTasks,
     createTask,
     updateTask,

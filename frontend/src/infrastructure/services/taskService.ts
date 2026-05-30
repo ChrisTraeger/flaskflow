@@ -162,6 +162,22 @@ export const taskService = {
     return handleResponse<Task>(res);
   },
 
+  async startTask(taskId: string): Promise<Task> {
+    const res = await fetchWithAuth(`${API_URL}/tasks/${taskId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "start" }),
+    });
+    return handleResponse<Task>(res);
+  },
+
+  async backToProgress(taskId: string): Promise<Task> {
+    const res = await fetchWithAuth(`${API_URL}/tasks/${taskId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "back" }),
+    });
+    return handleResponse<Task>(res);
+  },
+
   async sendToReview(taskId: string): Promise<Task> {
     const res = await fetchWithAuth(`${API_URL}/tasks/${taskId}/`, {
       method: "PATCH",
